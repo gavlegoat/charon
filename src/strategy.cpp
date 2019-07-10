@@ -172,7 +172,7 @@ void split(const AbstractResult &ar,
 
   const Interval &itv = ar.interval;
   const Eigen::VectorXd &counterexample = ar.counterexample;
-  const std::vector<Powerset> &layerOutputs = ar.layerOutputs;
+  //const std::vector<Powerset> &layerOutputs = ar.layerOutputs;
   Eigen::VectorXd strategy_input = interp.split_featurize(net, itv, counterexample);
   Eigen::VectorXd strategy_output = split_strategy * strategy_input;
 

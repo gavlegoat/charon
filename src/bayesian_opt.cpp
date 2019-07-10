@@ -95,8 +95,7 @@ class CegarOptimizer: public bayesopt::ContinuousModel {
     double evaluateSample(const boost::numeric::ublas::vector<double>& query) {
       // We should only get into this call when world_rank = 0
       // There might be a more efficient way to convert to an Eigen vector
-      time_t start = time(NULL);
-      int numProperties, propertiesToAssign, propertiesEvaluated = 0, propertiesVerified = 0;
+      int numProperties, propertiesToAssign, propertiesEvaluated = 0;
       int dos = strategy_interp.domain_output_size();
       int dis = strategy_interp.domain_input_size();
       int sos = strategy_interp.split_output_size();
@@ -144,7 +143,6 @@ class CegarOptimizer: public bayesopt::ContinuousModel {
           i++, propertiesToAssign--;
         }
       }
-      time_t end = time(NULL);
 
       return total_time;
     }
@@ -315,7 +313,7 @@ int main() {
       Eigen::VectorXd lower((numElements-propertyStart)/2), upper((numElements-propertyStart)/2);
       int lowerStart = propertyStart, upperStart = propertyStart + (numElements - propertyStart)/2;
       for (int i = 0; i < (numElements-propertyStart)/2; i++) {
-        lower(i) = strategyAndProperty[propertyStart+i];
+        lower(i) = strategyAndProperty[lowerStart+i];
         upper(i) = strategyAndProperty[upperStart+i];
       }
       //Verify property

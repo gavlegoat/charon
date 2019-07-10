@@ -41,6 +41,7 @@ Abstract0& Abstract0::operator=(Abstract0&& other) {
   other.value = nullptr;
   this->center = other.center;
   this->center_computed = other.center_computed;
+  return *this;
 }
 
 Eigen::VectorXd compute_center(elina_manager_t* man, elina_abstract0_t* abs) {

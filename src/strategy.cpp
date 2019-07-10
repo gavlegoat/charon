@@ -15,9 +15,6 @@
 #include <Eigen/Dense>
 
 #define NUM_THREADS 16
-#define PGD_ITERATIONS 100
-#define ALPHA 0.05
-#define HEURISTIC 0.0000001
 
 //Domain default_domain = Domain::IntervalDomain;
 Domain default_domain = Domain::ZonotopeDomain;
@@ -26,82 +23,15 @@ StrategyInterpretation::~StrategyInterpretation() {
   // Do nothing
 }
 
-
-double getSplitOffset(const Interval &input_space, uint dimension, double strategy_param) {
+double getSplitOffset(const Interval &input_space,
+    uint dimension, double strategy_param) {
   const Eigen::VectorXd center = input_space.get_center();
-  double eps = std::min(1.0 - BayesianStrategy::EPSILON, std::max(-1.0 + BayesianStrategy::EPSILON, strategy_param));
-  double len = (input_space.upper(dimension) - input_space.lower(dimension)) / 2.0;
+  double eps = std::min(1.0 - BayesianStrategy::EPSILON,
+      std::max(-1.0 + BayesianStrategy::EPSILON, strategy_param));
+  double len =
+    (input_space.upper(dimension) - input_space.lower(dimension)) / 2.0;
   return center(dimension) + len * eps;
 }
-
-void splitOnlyZonotope(const Eigen::VectorXd& strategy_output, const Network& net, const AbstractResult &ar, PolicyParams &params) {
-  const Interval& input_space = ar.interval;
-  const Eigen::VectorXd &counterexample = ar.counterexample;
-  const Eigen::VectorXd center = input_space.get_center();
-
-  params.dimension = (uint) input_space.longest_dim();
-  params.split_offset = getSplitOffset(input_space, params.dimension, strategy_output(0));
-  params.num_disjuncts_left = POWERSET_SIZE;
-  params.num_disjuncts_right = POWERSET_SIZE;
-  params.left_domain = Domain::ZonotopeDomain;
-  params.right_domain = Domain::ZonotopeDomain;
-}
-
-void splitIndependentDomain(const Eigen::VectorXd& strategy_output, const Network& net, const AbstractResult &ar, PolicyParams &params) {
-  const Interval& input_space = ar.interval;
-  const Eigen::VectorXd center = input_space.get_center();
-
-  params.dimension = (uint) input_space.longest_dim();
-  if (strategy_output(0) >= strategy_output(1)) {
-    params.left_domain = IntervalDomain;
-  } else {
-    params.right_domain = ZonotopeDomain;
-  }
-
-  if (strategy_output(2) >= strategy_output(3)) {
-    params.left_domain = IntervalDomain;
-  } else {
-    params.right_domain = ZonotopeDomain;
-  }
-  //params.left_domain = params.right_domain = Domain::IntervalDomain;
-
-  params.split_offset = getSplitOffset(input_space, params.dimension, strategy_output(4));
-  params.num_disjuncts_left = POWERSET_SIZE;
-  params.num_disjuncts_right = POWERSET_SIZE;
-}
-
-void splitChooseDimension(const Eigen::VectorXd& strategy_output, const Network& net, const AbstractResult &ar, PolicyParams &params) {
-  const Interval& input_space = ar.interval;
-  const std::vector<Powerset> &layerOutputs = ar.layerOutputs;
-  const Eigen::VectorXd &counterexample = ar.counterexample;
-  Eigen::VectorXd center = input_space.get_center();
-  //Interpret the first three outputs as scores for dimension
-  //strategy(0) -> dim with largest gradient
-  //strategy(1) -> dim with largest width
-  //strategy(2) -> dim with largest distance to counterexample
-
-  //params.dimension = back_prop(net, ar.interval, ar.maxInd, ar.layerOutputs);
-
-  if ((strategy_output(0) >= strategy_output(1)) && (strategy_output(0) >= strategy_output(2))) {
-     const std::vector<Powerset> &layerOutputs = ar.layerOutputs;
-     const Interval &input_space = ar.interval;
-     bool concretize;
-     Eigen::VectorXd center = input_space.get_center();
-     params.dimension = back_prop(net, input_space, concretize, ar.maxInd, layerOutputs);
-     //std::cout << "Gradient dim: " << dim << std::endl;
-  } else if ((strategy_output(1) > strategy_output(0)) && (strategy_output(1) > strategy_output(2))) {
-     params.dimension = (uint) input_space.longest_dim();
-    //std::cout << "Longest dim: " << dim << std::endl;
-  } else {
-     params.dimension = (uint) input_space.longest_dim(counterexample);
-     //std::cout << "Counter example longest dim: " << dim << std::endl;
-  }
-  params.split_offset = getSplitOffset(input_space, params.dimension, strategy_output(3));
-  params.num_disjuncts_left = 1;
-  params.num_disjuncts_right = 1;
-  std::cout << "Choosing split: " << params.split_offset << std::endl;
-}
-
 
 Eigen::VectorXd BayesianStrategy::domain_featurize(
     const Network& net, const Interval& input_space,
@@ -109,9 +39,13 @@ Eigen::VectorXd BayesianStrategy::domain_featurize(
   Eigen::VectorXd center = input_space.get_center();
   Eigen::VectorXd diff = counterexample - center;
   Eigen::VectorXd farthest = center - input_space.lower;
+  // Get the distance from the center to the counterexample in a few different
+  // norms and normalize these distances according to the distance from the
+  // center to the corner.
   double l1 = diff.lpNorm<1>() / farthest.lpNorm<1>();
-  double l2 = diff.norm() / farthest.norm();
   double linf = diff.lpNorm<Eigen::Infinity>() / farthest.lpNorm<Eigen::Infinity>();
+  // Get the difference between the two best scores at the point returned
+  // by the counterexample search.
   Eigen::VectorXd output = net.evaluate(counterexample);
   int best_ind = 0;
   double best_score = output(0);
@@ -132,6 +66,7 @@ Eigen::VectorXd BayesianStrategy::domain_featurize(
     }
   }
   double score_diff = (best_score - second_best_score) / std::abs(best_score);
+  // Get some information about the gradient at the counterexample point
   Eigen::VectorXd gradient = net.gradient(counterexample);
   double tmp = std::abs(gradient(0));
   double gradSum = tmp;
@@ -141,16 +76,18 @@ Eigen::VectorXd BayesianStrategy::domain_featurize(
       tmp = std::abs(gradient(i));
     }
   }
-  double ce_dim_largest_grad = tmp/gradSum;
+  double ce_dim_largest_grad = tmp / gradSum;
+  // Construct a strategy input from the gathered information
   Eigen::VectorXd strategy_input(this->domain_input_size());
-  strategy_input << l1, l2, linf, score_diff, ce_dim_largest_grad, input_space.average_len(), 1.0;
-  std::cout << "STRATEGY INPUT: " << strategy_input << std::endl;
+  strategy_input << l1, linf, score_diff, ce_dim_largest_grad, 1.0;
   return strategy_input;
 }
 
 Eigen::VectorXd BayesianStrategy::split_featurize(
     const Network& net, const Interval& input_space,
     const Eigen::VectorXd& counterexample) const {
+  // Use the same featurization function for partitioning as we do for
+  // choosing a domain.
   return domain_featurize(net, input_space, counterexample);
 }
 
@@ -158,15 +95,16 @@ void BayesianStrategy::domain_extract(
     const Eigen::VectorXd& strategy_output,
     const Network& net, const Eigen::VectorXd& counterexample,
     Domain& domain, int& num_disjuncts) const {
-  //return splitIndependentDomain(strategy_output, net, ar, params);
+  // Choose a domain
   if (strategy_output(0) >= 0) {
     domain = ZonotopeDomain;
-    std::cout << "Choosing zonotope" << std::endl;
   } else {
     domain = IntervalDomain;
-    std::cout << "Choosing interval" << std::endl;
   }
-  num_disjuncts = POWERSET_SIZE;
+  // Clip the powerset size output and discretize it into one of
+  // 64 options.
+  double clipped = std::max(0.0, std::min(1.0, strategy_output(1)));
+  num_disjuncts = (int) (clipped * 64);
 }
 
 void BayesianStrategy::split_extract(
@@ -174,12 +112,20 @@ void BayesianStrategy::split_extract(
     const Network& net, const AbstractResult& ar,
     double& split_offset, uint& dimension) const {
   bool concretize;
-  dimension = back_prop(net, ar.interval, concretize, ar.maxInd, ar.layerOutputs);
+  // Choose between the dimension of highest influence (dim1) and the longest
+  // dimension (dim2)
+  uint dim1 = back_prop(net, ar.interval, concretize, ar.maxInd,
+      ar.layerOutputs);
+  uint dim2 = ar.interval.longest_dim();
+  if (strategy_output(1) <= 0) {
+    dimension = dim1;
+  } else {
+    dimension = dim2;
+  }
   if (concretize)
     split_offset = 0;
   else
     split_offset = getSplitOffset(ar.interval, dimension, strategy_output(0));
-  std::cout << "epsilon: " << strategy_output(0) << std::endl;
 }
 
 // Free a given hyperinterval
@@ -218,7 +164,7 @@ Eigen::VectorXd python_list_to_eigen_vector(PyObject* pValue) {
   return ret;
 }
 
-
+// Split a given input region into two pieces to analyze
 void split(const AbstractResult &ar,
     const Eigen::MatrixXd& split_strategy, const Network& net,
     AbstractInput& left, AbstractInput& right,
@@ -234,12 +180,15 @@ void split(const AbstractResult &ar,
   uint dimension;
   interp.split_extract(strategy_output, net, ar, split_offset, dimension);
 
+  // These four vectors describe the bounds of the two new regions.
   Eigen::VectorXd left_lower(net.get_input_size());
   Eigen::VectorXd left_upper(net.get_input_size());
   Eigen::VectorXd right_lower(net.get_input_size());
   Eigen::VectorXd right_upper(net.get_input_size());
   for (int i = 0; i < net.get_input_size(); i++) {
     if (i == dimension) {
+      // If i is the split dimension, then we change left_upper and right_lower
+      // to partition the space.
       left_lower(i) = itv.lower(i);
       right_upper(i) = itv.upper(i);
       if (split_offset == 0) {
@@ -250,6 +199,7 @@ void split(const AbstractResult &ar,
         right_lower(i) = split_offset;
       }
     } else {
+      // All other bounds stay the same.
       left_lower(i) = itv.lower(i);
       left_upper(i) = itv.upper(i);
       right_lower(i) = itv.lower(i);
@@ -258,13 +208,12 @@ void split(const AbstractResult &ar,
   }
   left.property.set_bounds(left_lower, left_upper);
   right.property.set_bounds(right_lower, right_upper);
-  left.property.posDims = itv.posDims;
-  right.property.posDims = itv.posDims;
 }
 
+// Search for a counterexample
 Eigen::VectorXd find_counterexample(Interval input, int max_ind,
     const Network& net, PyObject* pgdAttack, PyObject* pFunc) {
-  // Let's try PGD from the center of this box
+  // PGD from the center of this box
   Eigen::VectorXd ce(net.get_input_size());
   Eigen::VectorXd lower = input.lower;
   Eigen::VectorXd upper = input.upper;
@@ -369,36 +318,34 @@ PyObject* create_attack_from_network(const Network& net, PyObject* pAttackInit) 
   return pgdAttack;
 }
 
+// See if an output value satisfies the robustness property.
 bool check_abstract_value(Powerset output, int max_ind, int dims) {
   // Construct an array of linear constraints encoding the part of the output
   // space where o(max_ind) > o(k) for all other k.
-  elina_lincons0_array_t cons = elina_lincons0_array_make(dims - 1);
   for (int i = 0; i < dims; i++) {
+    elina_lincons0_array_t cons = elina_lincons0_array_make(1);
     if (i == max_ind) {
       continue;
     }
     elina_linexpr0_t* le = elina_linexpr0_alloc(ELINA_LINEXPR_SPARSE, 2);
-    // Produce a lincons0 as x_i > x_{max_ind}, i.e., x_i - x_{max_ind} > 0
+    // Produce a lincons0 as x_i >= x_{max_ind}, i.e., x_i - x_{max_ind} >= 0
     elina_linexpr0_set_coeff_scalar_double(le, max_ind, -1.0);
     elina_linexpr0_set_coeff_scalar_double(le, i, 1.0);
-    if (i < max_ind) {
-      cons.p[i].constyp = ELINA_CONS_SUP;
-      cons.p[i].linexpr0 = le;
-    } else {
-      cons.p[i-1].constyp = ELINA_CONS_SUP;
-      cons.p[i-1].linexpr0 = le;
+    elina_linexpr0_set_cst_scalar_double(le, 0.0);
+    cons.p[0].constyp = ELINA_CONS_SUPEQ;
+    cons.p[0].linexpr0 = le;
+    Powerset p = output.meet_lincons_array(&cons);
+    elina_lincons0_array_clear(&cons);
+    if (!p.is_bottom()) {
+      // If p is not bottom, then it includes some point where
+      // x_i >= x_{max_ind}
+      return false;
     }
   }
-  Powerset p = output.meet_lincons_array(&cons);
-
-  // Free the lincons array
-  elina_lincons0_array_clear(&cons);
-
-  bool ret = p.is_bottom();
-
-  return ret;
+  return true;
 }
 
+// Propagate a given input interval through a network.
 std::vector<Powerset> propagate_through_network(Interval input, int disjuncts,
     const Network& net, elina_manager_t* man) {
   elina_interval_t** itv = (elina_interval_t**) malloc(input.lower.size() *
@@ -414,8 +361,7 @@ std::vector<Powerset> propagate_through_network(Interval input, int disjuncts,
   return net.propagate_powerset(z);
 }
 
-
-
+// Run one iteration of the Charon loop.
 AbstractResult verify_abstract(AbstractInput ai, int max_ind,
     const Network& net, PyObject* pgdAttack, PyObject* pFunc,
     const StrategyInterpretation* interp, const Eigen::MatrixXd strategy) {
@@ -442,7 +388,6 @@ AbstractResult verify_abstract(AbstractInput ai, int max_ind,
   for (int i = 0; i < net.get_output_size(); i++) {
     softmax(i) = std::exp(outp(i)) / softmax_total;
   }
-  std::cout << softmax.transpose() << std::endl;
 
   Eigen::VectorXd center(net.get_input_size());
   Eigen::VectorXd lower_corner = ai.property.lower;
@@ -460,6 +405,7 @@ AbstractResult verify_abstract(AbstractInput ai, int max_ind,
     return ar;
   }
 
+  // We did not find a counterexample, so now we need to choose a domain
   Eigen::VectorXd domain_inp = interp->domain_featurize(net, ai.property, ce);
   Eigen::VectorXd domain_outp = strategy * domain_inp;
   interp->domain_extract(domain_outp, net, ce, ai.domain, ai.disjuncts);
@@ -473,6 +419,7 @@ AbstractResult verify_abstract(AbstractInput ai, int max_ind,
 
   std::vector<Powerset> output = propagate_through_network(ai.property, ai.disjuncts, net, man);
 
+  // Check if the output is verified by abstract interpretation.
   if (check_abstract_value(output[output.size()-1], max_ind, net.get_output_size())) {
     // If it is, we can just free this interval and move on to the next one
     AbstractResult ar;
@@ -485,6 +432,7 @@ AbstractResult verify_abstract(AbstractInput ai, int max_ind,
     return ar;
   }
 
+  // Otherwise we did not find a proof or a counterexample.
   ar.falsified = false;
   ar.verified = false;
   ar.maxInd = max_ind;
@@ -510,35 +458,35 @@ bool verify_with_strategy(const Eigen::VectorXd& original,
   init.domain = default_domain;
   init.disjuncts = POWERSET_SIZE;
   std::deque<AbstractInput> to_verify;
-  // powerset_size keeps track of the size to use for each region in to_verify
   // Initially, to_verify is a single interval with the the entire input space
   to_verify.push_back(init);
   num_calls = 0;
+  // We use std::future for parallelism. It's possible to extend this with
+  // some more heavy duty framework like MPI.
   std::vector<std::future<AbstractResult>> results;
   bool verified = false;
   bool falsified = false;
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
   try {
     while (true) {
+      // Start up to NUM_THREADS processes to use to verify properties
       while (!to_verify.empty() && results.size() < NUM_THREADS) {
         AbstractInput input = to_verify.front();
-        //std::cout << input.property.lower.transpose() << " - " << input.property.upper.transpose() << std::endl;
         to_verify.pop_front();
         num_calls++;
-        std::cout << "to_verify size:" << to_verify.size() << std::endl;
         results.push_back(std::async(std::launch::async, verify_abstract, input,
               max_ind, net, pgdAttack, pFunc, &interp, domain_strategy));
       }
-//      std::cout << "is to_verify empty? " << to_verify.empty() << " results size: " << results.size() << results.empty() << std::endl;
+      // If there are no more regions to verify then the property has been
+      // proven.
       if (results.empty()) {
         verified = true;
-        //std::cout << "verified: to_verify.size(): " << to_verify.size() << std::endl;;
         return verified;
       }
+      // See if any of our computations have finished
       for (unsigned int i = 0; i < results.size(); i++) {
         std::future_status st = results[i].wait_for(std::chrono::seconds(5));
         if (st == std::future_status::ready) {
-          //std::cout << "Have a result" << std::endl;
           AbstractResult ar = results[i].get();
           results.erase(results.begin() + i);
           i--;
@@ -546,6 +494,7 @@ bool verify_with_strategy(const Eigen::VectorXd& original,
             // nothing to do
           } else if (ar.falsified) {
             falsified = true;
+            counterexample = ar.counterexample;
             return verified;
           } else {
             AbstractInput left;
@@ -559,7 +508,6 @@ bool verify_with_strategy(const Eigen::VectorXd& original,
       clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &current);
       double elapsed = (double)(current.tv_sec - start.tv_sec);
       if (elapsed > timeout) {
-        std::cout.flush();
         throw timeout_exception();
       }
     }
@@ -573,7 +521,9 @@ bool verify_with_strategy(const Eigen::VectorXd& original,
   return verified;
 }
 
-void intervalBounds(Eigen::VectorXd &lower, Eigen::VectorXd &upper, elina_interval_t** &box) {
+// Populate Eigen vector bounds from an ELINA interval
+void intervalBounds(Eigen::VectorXd &lower, Eigen::VectorXd &upper,
+    elina_interval_t** &box) {
   int size = upper.rows();
   for (int i = 0; i < size; i++) {
     elina_interval_t *itv = box[i];
@@ -582,7 +532,10 @@ void intervalBounds(Eigen::VectorXd &lower, Eigen::VectorXd &upper, elina_interv
   }
 }
 
-uint back_prop(const Network &net, const Interval &input, bool &concretize, const int trueClass, const std::vector<Powerset> &layerOutputs) {
+// Find the most influential dimension. This is based on work in ReluVal, see
+// github.com/tcwangshiqi-columbia/ReluVal
+uint back_prop(const Network &net, const Interval &input, bool &concretize,
+    const int trueClass, const std::vector<Powerset> &layerOutputs) {
   concretize = false;
   const std::vector<Eigen::MatrixXd> weights = net.get_weights();
   std::vector<uint> positiveWidthIntervals;
@@ -625,17 +578,11 @@ uint back_prop(const Network &net, const Interval &input, bool &concretize, cons
         int iw = net.get_layer_width(i);
         int ih = net.get_layer_height(i);
         int id = net.get_layer_depth(i);
-        std::cout << "plane: " << plane << "  col: " << col << "  row: " << row <<
-          "  iw: " << iw << "  ih: " << ih << "  id:" << id << "  j: " << j << std::endl;
         // row and col are now the first coordinates in the input space
         int ind00 = iw * id * row + id * col + plane;
         int ind01 = iw * id * row + id * (col + 1) + plane;
         int ind10 = iw * id * (row + 1) + id * col + plane;
         int ind11 = iw * id * (row + 1) + id * (col + 1) + plane;
-        std::cout << "ind00: " << ind00 << "  ind01: " << ind01 <<
-          "  ind10: " << ind10 << "  ind11: " << ind11 << std::endl;
-        std::cout << "lower2.size: " << lower2.size() << "  dLower.size: " << dLower.size() <<
-          "  dLower1.size: " << dLower1.size() << std::endl;
         bool couldBeMax00 = upper2(ind00) > lower2(ind01) &&
           upper2(ind00) > lower2(ind10) && upper2(ind00) > lower2(ind11);
         bool couldBeMax01 = upper2(ind01) > lower2(ind00) &&

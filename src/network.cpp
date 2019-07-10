@@ -13,6 +13,7 @@
 #include "network.hpp"
 #include "powerset.hpp"
 
+// Element-wise ReLU over a vector
 Eigen::VectorXd relu(const Eigen::VectorXd& x) {
   Eigen::VectorXd y = x;
   for (unsigned int i = 0; i < y.size(); i++) {
@@ -23,6 +24,7 @@ Eigen::VectorXd relu(const Eigen::VectorXd& x) {
   return y;
 }
 
+// Element-wise ReLU over a 3D tensor
 std::vector<Eigen::MatrixXd> relu(const std::vector<Eigen::MatrixXd>& x) {
   std::vector<Eigen::MatrixXd> y;
   for (Eigen::MatrixXd m : x) {
@@ -37,41 +39,9 @@ std::vector<Eigen::MatrixXd> relu(const std::vector<Eigen::MatrixXd>& x) {
   return y;
 }
 
-Eigen::VectorXd tanh(const Eigen::VectorXd& x) {
-  Eigen::VectorXd y = x;
-  for (unsigned int i = 0; i < y.size(); i++) {
-    y(i) = tanh(x(i));
-  }
-  return y;
-}
-
 Layer::Layer(int iw, int ih, int id, int ow, int oh, int od) :
-  input_width(iw), input_height(ih), input_depth(id), output_width(ow),
-  output_height(oh), output_depth(od) {}
-
-int Layer::get_input_width() const {
-  return input_width;
-}
-
-int Layer::get_input_height() const {
-  return input_height;
-}
-
-int Layer::get_input_depth() const {
-  return input_depth;
-}
-
-int Layer::get_output_height() const {
-  return output_height;
-}
-
-int Layer::get_output_width() const {
-  return output_width;
-}
-
-int Layer::get_output_depth() const {
-  return output_depth;
-}
+  input_width{iw}, input_height{ih}, input_depth{id}, output_width{ow},
+  output_height{oh}, output_depth{od} {}
 
 MaxPoolLayer::MaxPoolLayer(int ww, int wh, int iw, int ih, int d) :
     Layer(iw, ih, d, iw / ww, ih / wh, d), window_width(ww), window_height(wh) {
@@ -146,25 +116,11 @@ Powerset MaxPoolLayer::propagate_powerset(const Powerset& pow) const {
   // This is taken from the appendix of the AI2 paper
   // Rearrange the elements of p into blocks
   int dim = input_width * input_height * input_depth;
-  //Eigen::MatrixXd wmp = Eigen::MatrixXd::Zero(dim, dim);
-  //Eigen::VectorXd bmp = Eigen::VectorXd::Zero(dim);
   int p = window_height;
   int q = window_width;
   int r = input_depth;
   int m = input_height;
   int n = input_width;
-  //for (int i = 0; i < input_height; i++) {
-  //  for (int j = 0; j < input_width; j++) {
-  //    for (int k = 0; k < input_depth; k++) {
-  //      int row = r * p * q * ((n / q) * (i / p) + (j / q)) + p * q * k +
-  //        q * (i % p) + j % q;
-  //      int col = n * r * i + r * j + k;
-  //      wmp(row, col) = 1.0;
-  //    }
-  //  }
-  //}
-  //FCLayer fc(wmp, bmp);
-  //Powerset z = fc.propagate_powerset(pow);
 
   elina_dimperm_t* dp = elina_dimperm_alloc(dim);
   for (int i = 0; i < input_height; i++) {
@@ -207,21 +163,6 @@ Powerset MaxPoolLayer::propagate_powerset(const Powerset& pow) const {
     for (int j = 0; j < p * q; j++) {
       // Meet z with each element of maxes
       Powerset t = z.meet_lincons_array(&maxes[j]);
-      // Relevant affine transformation: remove each row in [i,i+p*q) except
-      // for i+j
-      //Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(m * n * r - (p * q - 1) * (i + 1),
-      //    m * n * r - (p * q - 1) * i);
-      //for (int k = 0; k < m * n * r - (p * q - 1) * i; k++) {
-      //  if (k < i) {
-      //    mat(k, k) = 1.0;
-      //  } else if (k == i) {
-      //    mat(k, i + j) = 1.0;
-      //  } else {
-      //    mat(k, k + p * q - 1) = 1.0;
-      //  }
-      //}
-      //Eigen::VectorXd b = Eigen::VectorXd::Zero(m * n * r - (p * q - 1) * i);
-      //t = t.affine(mat, b);
       elina_dimchange_t* dc = elina_dimchange_alloc(0, p * q - 1);
       int ind = 0;
       for (int k = 0; k < p * q; k++) {
@@ -248,7 +189,7 @@ Powerset MaxPoolLayer::propagate_powerset(const Powerset& pow) const {
 FCLayer::FCLayer() : Layer(0, 0, 0, 0, 0, 0) {}
 
 FCLayer::FCLayer(const Eigen::MatrixXd& w, const Eigen::VectorXd& b) :
-    Layer(1, w.cols(), 1, 1, b.size(), 1), weight(w), bias(b) {
+    Layer(1, w.cols(), 1, 1, b.size(), 1), weight{w}, bias{b} {
   if (w.rows() != b.size()) {
     throw std::runtime_error("Bad initialization of FCLayer");
   }
@@ -256,7 +197,7 @@ FCLayer::FCLayer(const Eigen::MatrixXd& w, const Eigen::VectorXd& b) :
 
 FCLayer::FCLayer(const Eigen::MatrixXd& w, const Eigen::VectorXd& b, int iw,
     int ih, int id, int ow, int oh, int od) :
-  Layer(iw, ih, id, ow, oh, od), weight(w), bias(b) {
+  Layer(iw, ih, id, ow, oh, od), weight{w}, bias{b} {
     if (w.rows() != b.size()) {
       throw std::runtime_error("Bad initialization of FCLayer");
     }
@@ -268,6 +209,7 @@ LayerType FCLayer::get_type() const {
 
 std::vector<Eigen::MatrixXd> FCLayer::evaluate(
     const std::vector<Eigen::MatrixXd>& x) const {
+  // Serialize the input tensor
   Eigen::VectorXd x_v(input_width * input_depth * input_height);
   for (int i = 0; i < input_depth; i++) {
     for (int j = 0; j < input_height; j++) {
@@ -277,8 +219,10 @@ std::vector<Eigen::MatrixXd> FCLayer::evaluate(
     }
   }
 
+  // Apply the affine transformation
   Eigen::VectorXd out = weight * x_v + bias;
 
+  // Deserialize the output
   std::vector<Eigen::MatrixXd> ret;
   for (int i = 0; i < output_depth; i++) {
     ret.push_back(Eigen::MatrixXd(output_height, output_width));
@@ -378,9 +322,9 @@ ConvLayer::ConvLayer(const std::vector<Filter>& fs,
     const std::vector<double>& bs, int iw, int ih) :
     Layer(iw, ih, fs[0].get_depth(), iw - fs[0].get_width() + 1,
         ih - fs[0].get_height() + 1, fs.size()),
-    filter_width(fs[0].get_width()), filter_height(fs[0].get_height()),
-    filter_depth(fs[0].get_depth()), num_filters(fs.size()), filters(fs),
-    biases(bs) {
+    filter_width{fs[0].get_width()}, filter_height{fs[0].get_height()},
+    filter_depth{fs[0].get_depth()}, num_filters(fs.size()), filters(fs),
+    biases{bs} {
   int fc_cols = input_width * input_height * input_depth;
   int fc_rows = output_width * output_height * output_depth;
 
@@ -416,7 +360,6 @@ LayerType ConvLayer::get_type() const {
 
 std::vector<Eigen::MatrixXd> ConvLayer::evaluate(
     const std::vector<Eigen::MatrixXd>& x) const {
-  //return fc.evaluate(x);
   std::vector<Eigen::MatrixXd> ret;
   for (int k = 0; k < num_filters; k++) {
     ret.push_back(Eigen::MatrixXd(output_height, output_width));
@@ -445,9 +388,6 @@ std::vector<Eigen::MatrixXd> ConvLayer::backpropagate(
 }
 
 Powerset ConvLayer::propagate_powerset(const Powerset& p) const {
-  // Since we set up the fully connected equivalent earlier, propagating
-  // through this layer just reduces to propagating through this->fc
-  //return fc.propagate_powerset(p);
   int out_size = output_height * output_width * output_depth;
   int filter_size = filter_height * filter_width * filter_depth;
   elina_dim_t* dims = (elina_dim_t*) malloc(out_size * sizeof(elina_dim_t));
@@ -484,51 +424,15 @@ Powerset ConvLayer::propagate_powerset(const Powerset& p) const {
   return ret;
 }
 
-Network::Network() : num_layers(0), input_width(0), input_height(0), input_depth(0),
-  output_size(0), layer_widths(std::vector<int>()), layer_heights(std::vector<int>()),
-  layer_depths(std::vector<int>()), layers(std::vector<std::shared_ptr<Layer>>()) {}
+Network::Network() : num_layers{0}, input_width{0}, input_height{0}, input_depth{0},
+  output_size{0}, layer_widths{{}}, layer_heights{{}},
+  layer_depths{{}}, layers{{}} {}
 
 Network::Network(int nl, int id, int iw, int ih, int os, std::vector<int> lws,
     std::vector<int> lhs, std::vector<int> lds, std::vector<std::shared_ptr<Layer>> ls)
-: num_layers(nl), input_width(iw), input_height(ih), input_depth(id), output_size(os),
+: num_layers{nl}, input_width{iw}, input_height{ih}, input_depth{id}, output_size{os},
   layer_widths(lws), layer_heights(lhs), layer_depths(lds),
   layers(ls) {}
-
-int Network::get_num_layers() const {
-  return num_layers;
-}
-
-int Network::get_input_width() const {
-  return input_width;
-}
-
-int Network::get_input_height() const {
-  return input_height;
-}
-
-int Network::get_layer_width(int n) const {
-  return layer_widths[n];
-}
-
-int Network::get_layer_height(int n) const {
-  return layer_heights[n];
-}
-
-int Network::get_layer_depth(int n) const {
-  return layer_depths[n];
-}
-
-int Network::get_input_size() const {
-  return input_width * input_height * input_depth;
-}
-
-int Network::get_output_size() const {
-  return output_size;
-}
-
-std::shared_ptr<Layer> Network::get_layer(int n) const {
-  return layers[n];
-}
 
 Eigen::VectorXd Network::evaluate(const Eigen::VectorXd& input) const {
   std::vector<Eigen::MatrixXd> in;
@@ -543,19 +447,10 @@ Eigen::VectorXd Network::evaluate(const Eigen::VectorXd& input) const {
     }
   }
   for (unsigned int i = 0; i < layers.size(); i++) {
-    //std::cout << in[0].rows() << " " << in[0].cols() << " " << in.size() << std::endl;
-    //std::cout << "    " << layers[i]->get_input_width() << " " << layers[i]->get_input_height()
-    //  << " " << layers[i]->get_input_depth() << std::endl;
     in = layers[i]->evaluate(in);
     if (i < layers.size() - 1) {
       in = relu(in);
     }
-    //std::cout << "Layer: " << i << std::endl;
-    //for (Eigen::MatrixXd m : in) {
-    //  std::cout << m << std::endl;
-    //  std::cout << std::endl;
-    //}
-    //std::cout << std::endl;
   }
   return in[0].col(0);
 }
@@ -708,6 +603,82 @@ std::vector<Filter> parse_filters(std::string s,
     }
     ret.push_back(Filter(filter));
   }
+  return ret;
+}
+
+std::vector<Powerset> Network::propagate_powerset(const Powerset& p) const {
+  Powerset z = p;
+  std::vector<Powerset> ret;
+  ret.push_back(z);
+  struct timespec start, end;
+  clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+  for (unsigned int i = 0; i < layers.size(); i++) {
+    z = layers[i]->propagate_powerset(z);
+    ret.push_back(z);
+    //std::cout << "Before ReLU in Layer: " << i << std::endl;
+    //for (unsigned int i = 0; i < z.disjuncts.size(); i++) {
+    //  elina_abstract0_fprint(stdout, z.disjuncts[i]->man, z.disjuncts[i]->value, NULL);
+    //}
+    //std::cout << std::endl;
+    if (i < layers.size() - 1 && layers[i]->get_type() != MP) {
+      z = z.relu();
+    }
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
+    double elapsed = (int) (end.tv_sec - start.tv_sec);
+    if (elapsed > 1000) {
+      throw std::runtime_error("");
+    }
+    //std::cout << "After Layer: " << i << std::endl;
+    //for (unsigned int i = 0; i < z.disjuncts.size(); i++) {
+    //  elina_abstract0_fprint(stdout, z.man, z.disjuncts[i], NULL);
+    //}
+    //std::cout << std::endl;
+  }
+  return ret;
+}
+
+std::vector<Eigen::MatrixXd> Network::get_weights() const {
+  std::vector<Eigen::MatrixXd> ret;
+  for (std::shared_ptr<Layer> l : layers) {
+    //if (l->get_type() != FC) {
+    //  throw std::runtime_error("Non-fully connected layer encountered in get_weights");
+    //}
+    if (l->get_type() == FC) {
+      std::shared_ptr<FCLayer> fcl = std::static_pointer_cast<FCLayer>(l);
+      ret.push_back(fcl->weight);
+    } else if (l->get_type() == CONV) {
+      std::shared_ptr<ConvLayer> cl = std::static_pointer_cast<ConvLayer>(l);
+      ret.push_back(cl->fc.weight);
+    } else {
+      ret.push_back(Eigen::MatrixXd(0, 0));
+    }
+  }
+  return ret;
+}
+
+std::vector<Eigen::VectorXd> Network::get_biases() const {
+  std::vector<Eigen::VectorXd> ret;
+  for (std::shared_ptr<Layer> l : layers) {
+    if (l->get_type() != FC) {
+      throw std::runtime_error("Non-fully connected layer encountered in get_biases");
+    }
+    std::shared_ptr<FCLayer> fcl = std::static_pointer_cast<FCLayer>(l);
+    ret.push_back(fcl->bias);
+  }
+  return ret;
+}
+
+std::vector<int> Network::get_layer_sizes() const {
+  std::vector<int> ret;
+  for (std::shared_ptr<Layer> l : layers) {
+    ret.push_back(l->get_input_width() * l->get_input_height() * l->get_input_depth());
+  }
+  std::shared_ptr<Layer> l = layers.back();
+  if (l->get_type() != FC) {
+    throw std::runtime_error("Non-fully connected layer encountered in get_layer_sizes");
+  }
+  std::shared_ptr<FCLayer> fcl = std::static_pointer_cast<FCLayer>(l);
+  ret.push_back(fcl->get_output_width() * fcl->get_output_height() * fcl->get_output_depth());
   return ret;
 }
 
@@ -902,82 +873,7 @@ void print_bounding_box(const Powerset& p) {
   free(box);
 }
 
-std::vector<Powerset> Network::propagate_powerset(const Powerset& p) const {
-  Powerset z = p;
-  std::vector<Powerset> ret;
-  ret.push_back(z);
-  struct timespec start, end;
-  clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-  for (unsigned int i = 0; i < layers.size(); i++) {
-    z = layers[i]->propagate_powerset(z);
-    ret.push_back(z);
-    //std::cout << "Before ReLU in Layer: " << i << std::endl;
-    //for (unsigned int i = 0; i < z.disjuncts.size(); i++) {
-    //  elina_abstract0_fprint(stdout, z.disjuncts[i]->man, z.disjuncts[i]->value, NULL);
-    //}
-    //std::cout << std::endl;
-    if (i < layers.size() - 1 && layers[i]->get_type() != MP) {
-      z = z.relu();
-    }
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
-    double elapsed = (int) (end.tv_sec - start.tv_sec);
-    if (elapsed > 1000) {
-      throw std::runtime_error("");
-    }
-    //std::cout << "After Layer: " << i << std::endl;
-    //for (unsigned int i = 0; i < z.disjuncts.size(); i++) {
-    //  elina_abstract0_fprint(stdout, z.man, z.disjuncts[i], NULL);
-    //}
-    //std::cout << std::endl;
-  }
-  return ret;
-}
-
-std::vector<Eigen::MatrixXd> Network::get_weights() const {
-  std::vector<Eigen::MatrixXd> ret;
-  for (std::shared_ptr<Layer> l : layers) {
-    //if (l->get_type() != FC) {
-    //  throw std::runtime_error("Non-fully connected layer encountered in get_weights");
-    //}
-    if (l->get_type() == FC) {
-      std::shared_ptr<FCLayer> fcl = std::static_pointer_cast<FCLayer>(l);
-      ret.push_back(fcl->weight);
-    } else if (l->get_type() == CONV) {
-      std::shared_ptr<ConvLayer> cl = std::static_pointer_cast<ConvLayer>(l);
-      ret.push_back(cl->fc.weight);
-    } else {
-      ret.push_back(Eigen::MatrixXd(0, 0));
-    }
-  }
-  return ret;
-}
-
-std::vector<Eigen::VectorXd> Network::get_biases() const {
-  std::vector<Eigen::VectorXd> ret;
-  for (std::shared_ptr<Layer> l : layers) {
-    if (l->get_type() != FC) {
-      throw std::runtime_error("Non-fully connected layer encountered in get_biases");
-    }
-    std::shared_ptr<FCLayer> fcl = std::static_pointer_cast<FCLayer>(l);
-    ret.push_back(fcl->bias);
-  }
-  return ret;
-}
-
-std::vector<int> Network::get_layer_sizes() const {
-  std::vector<int> ret;
-  for (std::shared_ptr<Layer> l : layers) {
-    ret.push_back(l->get_input_width() * l->get_input_height() * l->get_input_depth());
-  }
-  std::shared_ptr<Layer> l = layers.back();
-  if (l->get_type() != FC) {
-    throw std::runtime_error("Non-fully connected layer encountered in get_layer_sizes");
-  }
-  std::shared_ptr<FCLayer> fcl = std::static_pointer_cast<FCLayer>(l);
-  ret.push_back(fcl->get_output_width() * fcl->get_output_height() * fcl->get_output_depth());
-  return ret;
-}
-
+/*
 Eigen::VectorXd Network::backpropagate(
     Eigen::VectorXd input, int max_ind) {
   std::vector<Eigen::MatrixXd> in;
@@ -1045,4 +941,4 @@ Eigen::VectorXd Network::backpropagate(
 
   return in_v;
 }
-
+*/

@@ -12,37 +12,34 @@
 #include <Eigen/Dense>
 #include <bayesopt/bayesopt.hpp>
 #ifdef TACC
-//MPI path is different on tacc
 #include <mpi.h>
 #else
 #include <mpi/mpi.h>
 #endif
 
 #define EPSILON 0.01
-#define TIMEOUT 700
+#define TIMEOUT 1000
 #define PENALTY 2
 
 namespace Networks {
-    enum Nets {
-      ACAS_XU,
-      MNIST_3_100,
-      //  MNIST_6_100
-    };
-    static const Nets All[] = {ACAS_XU, MNIST_3_100};
+  enum Nets {
+    ACAS_XU,
+    MNIST_3_100,
+  };
+  static const Nets All[] = {ACAS_XU, MNIST_3_100};
 }
 
 
 static std::map<Networks::Nets, Network> networks = {
-    {Networks::Nets::ACAS_XU, read_network("benchmarks/acas_xu_1_1.txt")},
-    {Networks::Nets::MNIST_3_100, read_network("benchmarks/mnist_relu_3_100.txt")},
-   // {Networks::Nets::MNIST_6_100, read_network("benchmarks/mnist_relu_6_100.txt")},
+  {Networks::Nets::ACAS_XU, read_network("benchmarks/acas_xu_1_1.txt")},
+  {Networks::Nets::MNIST_3_100, read_network("benchmarks/mnist_relu_3_100.txt")},
 };
 
 static std::map<Networks::Nets, PyObject*> networkAttacks;
 
 typedef struct property {
-    Interval itv;
-    Networks::Nets net;
+  Interval itv;
+  Networks::Nets net;
 } Property;
 
 std::string currentDir() {
@@ -85,7 +82,6 @@ class CegarOptimizer: public bayesopt::ContinuousModel {
           assert(results.size() == 2);
           Property p;
           p.itv = Interval(results[0]);
-          //p.net = static_cast<Networks::Nets>(std::stoi(results[1]));
           p.net = Networks::Nets::ACAS_XU;
           properties.push_back(p);
         }
@@ -101,12 +97,6 @@ class CegarOptimizer: public bayesopt::ContinuousModel {
       // There might be a more efficient way to convert to an Eigen vector
       time_t start = time(NULL);
       int numProperties, propertiesToAssign, propertiesEvaluated = 0, propertiesVerified = 0;
-      //Eigen::MatrixXd strat(strategy_interp.output_size(), strategy_interp.input_size());
-      //for (int i = 0; i < strategy_interp.output_size(); i++) {
-      //  for (int j = 0; j < strategy_interp.input_size(); j++) {
-      //    strat(i, j) = x(strategy_interp.input_size() * i + j);
-      //  }
-      //}
       int dos = strategy_interp.domain_output_size();
       int dis = strategy_interp.domain_input_size();
       int sos = strategy_interp.split_output_size();
@@ -148,20 +138,15 @@ class CegarOptimizer: public bayesopt::ContinuousModel {
           total_time += PENALTY * TIMEOUT;
         }
         propertiesEvaluated++;
-        std::cout << "Evaluated: " << propertiesEvaluated << "/" << numProperties << " properties" << std::endl;
-        std::cout << "RECEIVED VERIFICATION FROM: " << status.MPI_SOURCE << " with status: " << verified << std::endl;
         if (propertiesToAssign > 0) {
           source = status.MPI_SOURCE;
           this->sendProperty(Networks::MNIST_3_100, i, source, query);
           i++, propertiesToAssign--;
         }
       }
-      std::cout << "  Count: " << count << std::endl;
       time_t end = time(NULL);
-      std::cout << "Iteration took: " << difftime(end, start) << " seconds" << std::endl;
-         
+
       return total_time;
-      //return -1.0 * ((double) count);
     }
 
     bool checkReachability(const boost::numeric::ublas::vector<double>& query) {
@@ -169,7 +154,7 @@ class CegarOptimizer: public bayesopt::ContinuousModel {
       return true;
     }
 
-private:
+  private:
     void sendProperty(const Networks::Nets netId, const int property, const int worker, const boost::numeric::ublas::vector<double>& query) {
       std::cout << "Sending network " << netId << " and property: " << property << " to worker: " << worker << std::endl;
       MPI_Send(&netId, 1, MPI_INT, worker, 0, MPI_COMM_WORLD);
@@ -191,7 +176,6 @@ private:
 };
 
 int main() {
-
   std::string benchmarks = "train_files.txt";
   MPI_Init(NULL, NULL);
   std::string cwd;
@@ -276,15 +260,10 @@ int main() {
       upper_bound(i) = 1.0;
     }
 
-    std::cout << "ABOUT TO OPTIMIZE" << std::endl;
     CegarOptimizer opt(dim, params, bi, world_size, benchmarks);
-    std::cout << "INITIALIZED BAYES" << std::endl;
     opt.setBoundingBox(lower_bound, upper_bound);
-    std::cout << "SET BBOX" << std::endl;
     opt.optimize(best_point);
 
-    std::cout << "Best strategy:" << std::endl;
-    std::cout << best_point << std::endl;
     int done = -1.0;
     for (int i = 1; i < world_size; i++) {
       MPI_Send(&done, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
@@ -296,7 +275,6 @@ int main() {
       //Receive properties from master process and then execute them
       int world_rank;
       MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-      std::cout << "worker: " << world_rank << " waiting...." << std::endl;
       int numElements, verified, netId;
       MPI_Status status;
 
@@ -362,7 +340,6 @@ int main() {
         MPI_Send(&verified, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
         double elapsed = (double)(end.tv_sec - start.tv_sec);
         MPI_Send(&elapsed, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-        std::cout << "worker: " << world_rank << " took: " << elapsed << " seconds to verify" << std::endl;
       } catch (timeout_exception e) {
         // This exception indicates a timeout
         // We don't need to do anything here
@@ -371,7 +348,6 @@ int main() {
         MPI_Send(&verified, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
         double elapsed = (double)(end.tv_sec - start.tv_sec);
         MPI_Send(&elapsed, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-        std::cout << "worker: " << world_rank << " took: " << elapsed << " seconds to verify" << std::endl;
       }
     }
   }

@@ -13,7 +13,7 @@
 #include <fstream>
 
 class interval {
-public:
+  public:
     Eigen::VectorXd lower;
     Eigen::VectorXd upper;
     std::vector<int> posDims;

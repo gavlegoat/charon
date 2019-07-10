@@ -1,6 +1,6 @@
 /* Greg Anderson
- *
- * Define a neural network.  */
+ * Define a neural network.
+ */
 
 #ifndef _NETWORK_H_
 #define _NETWORK_H_

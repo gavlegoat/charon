@@ -1,3 +1,9 @@
+/* Greg Anderson
+ *
+ * Definition of a bounded powerset domain for some underlying domain in the
+ * ELINA abstract interpretation library.
+ */
+
 #include <zonotope.h>
 #include <elina_box_internal.h>
 

@@ -1,3 +1,7 @@
+/* Greg Anderson
+ * Classes and utilities for representing neural networks.
+ */
+
 #include <zonotope.h>
 
 #include <iostream>

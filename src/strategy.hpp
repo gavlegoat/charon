@@ -1,3 +1,7 @@
+/* Greg Anderson
+ * Classes for mapping a vector to a strategy.
+ */
+
 #include <zonotope.h>
 
 #include <cstdlib>

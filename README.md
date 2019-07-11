@@ -20,7 +20,7 @@ $ git clone https://github.com/gavlegoat/charon.git .
 $ cd charon
 $ mkdir build && cd build
 $ cmake ../
-$ make learn
+$ make
 ```
 
 # Using Charon

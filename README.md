@@ -5,6 +5,7 @@ The Charon tool for analyzing neural network robustness. See our
 # Dependencies
 Charon uses [ELINA](http://elina.ethz.ch/) for abstract interpretation and
 [BayesOpt](https://github.com/rmcantin/bayesopt) for Bayesian optimization.
+It uses [TensorFlow](https://www.tensorflow.org/install/pip) for counterexample search.
 Additionally, the training module uses MPI for parallelization to improve
 training times. ELINA and BayesOpt have good installation instructions on the
 linked websites. For MPI you can choose your favorite MPI implementation, or

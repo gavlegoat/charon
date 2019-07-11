@@ -17,6 +17,7 @@ build Charon as follows:
 
 ```bash
 $ git clone https://github.com/gavlegoat/charon.git .
+$ cd charon
 $ mkdir build && cd build
 $ cmake ../
 $ make learn
@@ -39,7 +40,7 @@ $ mpirun -n N ./learn ../example/training_properties.txt
 ```
 
 where N is the number of MPI processes you wish to use. Notice that each MPI
-process will spawn several separate threads, so N is /not/ the number of
+process will spawn several separate threads, so N is *not* the number of
 execution threads to use. The number of threads per MPI process is controlled
 by the macro `NUM_THREADS` in `strategy.cpp`. Other parameters you may wish to
 change for training include `TIMEOUT` and `PENALTY` in `bayesian_opt.cpp`.

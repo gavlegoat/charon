@@ -305,7 +305,7 @@ Powerset Powerset::join(const Powerset& other) const {
         ds[1]->center = compute_center(ds[1]->man, ds[1]->value);
       }
       double best_dist = (ds[0]->center - ds[1]->center).norm();
-      for (unsigned int i = 0; i < ds.size(); i++) {
+      for (unsigned int i = 0; i < ds.size() - 1; i++) {
         if (!ds[i]->center_computed) {
           ds[i]->center = compute_center(ds[i]->man, ds[i]->value);
         }
@@ -313,7 +313,7 @@ Powerset Powerset::join(const Powerset& other) const {
           if (!ds[j]->center_computed) {
             ds[j]->center = compute_center(ds[j]->man, ds[j]->value);
           }
-          double dist = (ds[i]->center - ds[j]->center).norm();
+          double dist = (ds[i]->center - ds[j]->center).lpNorm<Eigen::Infinity>();
           if (dist < best_dist) {
             best_i = i;
             best_j = j;

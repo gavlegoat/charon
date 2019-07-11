@@ -16,6 +16,10 @@ add_executable(learn ${CMAKE_CURRENT_SOURCE_DIR}/src/bayesian_opt.cpp ${CMAKE_CU
 target_include_directories(learn PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/eigen)
 target_link_libraries(learn cegar_net bayesopt nlopt gmp mpfr zonotope elinaux python2.7 pthread dl util m gomp)
 
+add_executable(run ${CMAKE_CURRENT_SOURCE_DIR}/src/run_charon.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/strategy.cpp)
+target_include_directories(run PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/eigen)
+target_link_libraries(run cegar_net gmp mpfr zonotope elinaux python2.7 pthread dl util m gomp)
+
 set(CMAKE_CXX_COMPILER mpicxx)
 add_compile_definitions(CHARON_HOME="${CMAKE_CURRENT_SOURCE_DIR}/")
 

@@ -20,7 +20,6 @@
 #include <mpi/mpi.h>
 #endif
 
-#define EPSILON 0.01
 #define TIMEOUT 1000
 #define PENALTY 2
 

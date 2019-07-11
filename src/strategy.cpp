@@ -30,8 +30,8 @@ StrategyInterpretation::~StrategyInterpretation() {
 double getSplitOffset(const Interval &input_space,
     uint dimension, double strategy_param) {
   const Eigen::VectorXd center = input_space.get_center();
-  double eps = std::min(1.0 - BayesianStrategy::EPSILON,
-      std::max(-1.0 + BayesianStrategy::EPSILON, strategy_param));
+  double eps = std::min(1.0 - EPSILON,
+      std::max(-1.0 + EPSILON, strategy_param));
   double len =
     (input_space.upper(dimension) - input_space.lower(dimension)) / 2.0;
   return center(dimension) + len * eps;
@@ -108,7 +108,7 @@ void BayesianStrategy::domain_extract(
   // Clip the powerset size output and discretize it into one of
   // 64 options.
   double clipped = std::max(0.0, std::min(1.0, strategy_output(1)));
-  num_disjuncts = (int) (clipped * 64);
+  num_disjuncts = 1 + (int) (clipped * 64);
 }
 
 void BayesianStrategy::split_extract(

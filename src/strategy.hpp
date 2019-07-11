@@ -14,6 +14,7 @@
 #include "network.hpp"
 #include "interval.hpp"
 
+#define EPSILON 0.01
 #define POWERSET_SIZE 1
 
 /**
@@ -161,8 +162,6 @@ class StrategyInterpretation {
  */
 class BayesianStrategy : public StrategyInterpretation {
   public:
-    constexpr static const float EPSILON = 0.01;
-
     int domain_input_size() const {
       return 5;
     }

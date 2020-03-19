@@ -306,6 +306,8 @@ int main(int argc, char** argv) {
       MPI_Send(&done, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
     }
 
+
+
   } else {
     struct timespec start, end;
     while(true) {

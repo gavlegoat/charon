@@ -40,6 +40,9 @@ int main(int argc, char** argv) {
   int sis = si->split_input_size();
   Eigen::VectorXd strategyMat(dis * dos + sis * sos);
   std::ifstream in(strategy_filename);
+  for (int i = 0; i < dis * dos + sis * sos; i++) {
+    in >> strategyMat(i);
+  }
   Eigen::MatrixXd domain_strat(dos, dis);
   Eigen::MatrixXd split_strat(sos, sis);
   for (int i = 0; i < dos * dis; i++) {
